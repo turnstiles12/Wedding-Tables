@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wedding Seating — Admin</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;1,300;1,400&family=Jost:wght@300;400;500&display=swap');
+
+  :root {
+    --cream: #faf7f2;
+    --parchment: #f0ead8;
+    --gold: #c9a84c;
+    --gold-light: #e8d49a;
+    --dark: #2a2118;
+    --mid: #6b5c45;
+    --border: #d8cdb8;
+    --green: #3d6b50;
+    --red: #8b3a3a;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Jost', sans-serif; background: var(--cream); color: var(--dark); min-height: 100vh; }
+  body::before { content: ''; display: block; height: 4px; background: linear-gradient(90deg, transparent, var(--gold), var(--gold-light), var(--gold), transparent); }
+
+  header { text-align: center; padding: 48px 20px 32px; border-bottom: 1px solid var(--border); position: relative; }
+  header::after { content: '✦ ✦ ✦'; display: block; color: var(--gold); font-size: 10px; letter-spacing: 8px; margin-top: 16px; }
+  .eyebrow { font-size: 11px; font-weight: 500; letter-spacing: 4px; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+  h1 { font-family: 'Cormorant Garamond', serif; font-size: clamp(36px, 5vw, 56px); font-weight: 300; letter-spacing: 2px; }
+  h1 em { font-style: italic; color: var(--mid); }
+  .subtitle { font-size: 13px; color: var(--mid); margin-top: 8px; letter-spacing: 1px; }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+  @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 2px; padding: 32px; position: relative; }
+  .card::before { content: ''; position: absolute; top: 6px; left: 6px; right: 6px; bottom: 6px; border: 1px solid var(--border); pointer-events: none; opacity: 0.4; }
+  .card-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 400; margin-bottom: 4px; display: flex; align-items: center; gap: 10px; }
+  .card-sub { font-size: 12px; color: var(--mid); letter-spacing: 1px; margin-bottom: 24px; }
+
+  label { display: block; font-size: 11px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; color: var(--mid); margin-bottom: 6px; margin-top: 16px; }
+  input, select { width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 1px; background: var(--cream); font-family: 'Jost', sans-serif; font-size: 14px; color: var(--dark); outline: none; transition: border-color 0.2s; }
+  input:focus, select:focus { border-color: var(--gold); background: #fff; }
+
+  button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 24px; border: none; border-radius: 1px; font-family: 'Jost', sans-serif; font-size: 12px; font-weight: 500; letter-spacing: 2px; text-transform: uppercase; cursor: pointer; transition: all 0.2s; }
+  .btn-primary { background: var(--dark); color: #fff; width: 100%; margin-top: 20px; }
+  .btn-primary:hover { background: var(--mid); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-gold { background: var(--gold); color: #fff; width: 100%; margin-top: 12px; }
+  .btn-gold:hover { background: var(--dark); }
+  .btn-sm { padding: 5px 12px; font-size: 10px; letter-spacing: 1px; background: transparent; border: 1px solid var(--border); color: var(--mid); }
+  .btn-sm:hover { border-color: var(--red); color: var(--red); }
+
+  .stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 24px; }
+  .stat { background: var(--parchment); padding: 16px; text-align: center; border-radius: 1px; }
+  .stat-num { font-family: 'Cormorant Garamond', serif; font-size: 32px; font-weight: 300; color: var(--dark); display: block; line-height: 1; }
+  .stat-label { font-size: 10px; letter-spacing: 2px; text-transform: uppercase; color: var(--mid); margin-top: 4px; }
+
+  .guest-list { margin-top: 16px; max-height: 320px; overflow-y: auto; }
+  .guest-list::-webkit-scrollbar { width: 4px; }
+  .guest-list::-webkit-scrollbar-track { background: var(--parchment); }
+  .guest-list::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .guest-item { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-bottom: 1px solid var(--parchment); font-size: 14px; animation: fadeIn 0.3s ease; }
+  .guest-item:last-child { border-bottom: none; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+  .guest-name { font-weight: 400; }
+  .guest-table { font-family: 'Cormorant Garamond', serif; font-size: 13px; color: var(--mid); background: var(--parchment); padding: 2px 10px; border-radius: 20px; margin-right: 10px; }
+  .guest-actions { display: flex; gap: 6px; align-items: center; }
+  .empty-state { text-align: center; padding: 32px; color: var(--mid); font-size: 13px; font-style: italic; font-family: 'Cormorant Garamond', serif; }
+
+  .qr-full { grid-column: 1 / -1; }
+  .qr-inner { display: flex; gap: 40px; align-items: flex-start; flex-wrap: wrap; }
+  .qr-box { background: var(--cream); border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 12px; min-width: 180px; }
+  .qr-label { font-family: 'Cormorant Garamond', serif; font-size: 13px; color: var(--mid); text-align: center; font-style: italic; }
+  .qr-info { flex: 1; }
+  .url-display { background: var(--parchment); border: 1px solid var(--border); padding: 12px 16px; font-size: 13px; color: var(--mid); word-break: break-all; font-family: monospace; margin: 12px 0; border-radius: 1px; }
+
+  .notice { background: linear-gradient(135deg, #fdf8ee, #faf4e4); border-left: 3px solid var(--gold); padding: 16px 20px; font-size: 13px; color: var(--mid); line-height: 1.7; margin-top: 16px; }
+  .notice strong { color: var(--dark); }
+  .notice code { background: var(--parchment); padding: 1px 5px; border-radius: 2px; font-size: 12px; }
+
+  .search-filter { position: relative; margin-bottom: 12px; }
+  .search-filter input { padding-left: 36px; background: var(--parchment); }
+  .search-filter::before { content: '⌕'; position: absolute; left: 12px; top: 50%; transform: translateY(-50%); color: var(--mid); font-size: 16px; pointer-events: none; }
+
+  .table-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .tab { padding: 4px 12px; font-size: 11px; letter-spacing: 1px; cursor: pointer; border: 1px solid var(--border); background: transparent; color: var(--mid); border-radius: 20px; transition: all 0.2s; font-family: 'Jost', sans-serif; }
+  .tab.active, .tab:hover { background: var(--dark); color: #fff; border-color: var(--dark); }
+
+  .divider { text-align: center; margin: 24px 0; position: relative; color: var(--mid); font-size: 12px; letter-spacing: 3px; }
+  .divider::before { content: ''; position: absolute; top: 50%; left: 0; right: 0; height: 1px; background: var(--border); }
+  .divider span { position: relative; background: #fff; padding: 0 12px; }
+
+  .import-area { border: 2px dashed var(--border); padding: 20px; text-align: center; font-size: 13px; color: var(--mid); cursor: pointer; transition: border-color 0.2s; margin-top: 12px; font-family: 'Cormorant Garamond', serif; font-style: italic; }
+  .import-area:hover { border-color: var(--gold); }
+
+  .clear-btn { background: transparent; border: 1px solid var(--red); color: var(--red); font-size: 11px; letter-spacing: 1px; padding: 6px 16px; margin-top: 12px; width: 100%; }
+  .clear-btn:hover { background: var(--red); color: #fff; }
+
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--dark); color: #fff; padding: 12px 20px; font-size: 13px; border-radius: 2px; transform: translateY(80px); opacity: 0; transition: all 0.3s ease; z-index: 999; letter-spacing: 0.5px; }
+  .toast.show { transform: translateY(0); opacity: 1; }
+  .toast.error { background: var(--red); }
+
+  .server-status { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1px; color: var(--mid); margin-bottom: 20px; }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; flex-shrink: 0; }
+  .status-dot.online { background: var(--green); box-shadow: 0 0 6px rgba(61,107,80,0.5); }
+  .status-dot.offline { background: var(--red); }
+
+  .loading { opacity: 0.5; pointer-events: none; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow">Wedding Seating Chart</div>
+  <h1>Table <em>Management</em></h1>
+  <div class="subtitle">Admin Panel · Connected to live database</div>
+</header>
+
+<div class="container">
+  <div class="server-status">
+    <div class="status-dot" id="statusDot"></div>
+    <span id="statusText">Connecting to server…</span>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><span class="stat-num" id="stat-guests">—</span><div class="stat-label">Guests</div></div>
+    <div class="stat"><span class="stat-num" id="stat-tables">—</span><div class="stat-label">Tables</div></div>
+    <div class="stat"><span class="stat-num" id="stat-avg">—</span><div class="stat-label">Avg / Table</div></div>
+  </div>
+
+  <div class="grid">
+
+    <!-- Add Guest -->
+    <div class="card">
+      <div class="card-title"><span>✦</span> Add Guest</div>
+      <div class="card-sub">Enter each guest's full name and table assignment</div>
+
+      <label>First Name</label>
+      <input type="text" id="firstName" placeholder="Jane">
+
+      <label>Last Name</label>
+      <input type="text" id="lastName" placeholder="Smith">
+
+      <label>Table Number</label>
+      <input type="number" id="tableNum" placeholder="1" min="1">
+
+      <button class="btn-primary" id="addBtn" onclick="addGuest()">⊕ &nbsp;Add Guest</button>
+
+      <div class="divider"><span>or import</span></div>
+
+      <div class="import-area" onclick="document.getElementById('csvInput').click()">
+        Drop a CSV here or click to import<br>
+        <small style="font-size:11px; font-style:normal; letter-spacing:1px; color:var(--border)">FORMAT: First Name, Last Name, Table</small>
+      </div>
+      <input type="file" id="csvInput" accept=".csv" style="display:none" onchange="importCSV(event)">
+
+      <button class="clear-btn" onclick="clearAll()">✕ &nbsp;Clear All Guests</button>
+    </div>
+
+    <!-- Guest List -->
+    <div class="card">
+      <div class="card-title"><span>◈</span> Guest List</div>
+      <div class="card-sub">All guests stored in the database</div>
+
+      <div class="table-tabs" id="tableTabs">
+        <button class="tab active" onclick="filterTable('all', this)">All</button>
+      </div>
+
+      <div class="search-filter">
+        <input type="text" id="searchGuest" placeholder="Search guests..." oninput="renderList()">
+      </div>
+
+      <div class="guest-list" id="guestList">
+        <div class="empty-state">Connecting…</div>
+      </div>
+    </div>
+
+    <!-- QR Code -->
+    <div class="card qr-full">
+      <div class="card-title"><span>◻</span> Guest Lookup QR Code</div>
+      <div class="card-sub">Share with guests so they can find their table from any device</div>
+
+      <div class="qr-inner">
+        <div class="qr-box">
+          <div id="qrcode"></div>
+          <div class="qr-label">Scan to find<br>your table</div>
+          <button class="btn-sm" onclick="downloadQR()">↓ Download PNG</button>
+        </div>
+
+        <div class="qr-info">
+          <label>Guest Lookup URL</label>
+          <div class="url-display" id="urlDisplay">http://localhost:3000/guest.html</div>
+
+          <label>Custom / Public URL (for hosting online)</label>
+          <input type="text" id="customUrl" placeholder="https://yourwedding.com/seating" oninput="generateQR()">
+
+          <div class="notice">
+            <strong>How it works:</strong><br>
+            Guests scan this QR code → opens <code>guest.html</code> → they search their name → the page queries the live database → their table appears instantly.<br><br>
+            <strong>To share publicly:</strong> Deploy this server to a host like <code>Railway</code>, <code>Render</code>, or <code>Fly.io</code>, then paste the public URL above.
+          </div>
+
+          <button class="btn-gold" onclick="window.open('/guest.html','_blank')">↗ &nbsp;Preview Guest Page</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+  const API = '';  // same origin
+  let allGuests = [];
+  let activeFilter = 'all';
+
+  // ── Toast ────────────────────────────────────────────────────
+  function toast(msg, isError = false) {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = 'toast' + (isError ? ' error' : '');
+    t.classList.add('show');
+    setTimeout(() => t.classList.remove('show'), 3000);
+  }
+
+  // ── Server status ────────────────────────────────────────────
+  async function checkServer() {
+    try {
+      const r = await fetch(`${API}/api/stats`);
+      if (!r.ok) throw new Error();
+      document.getElementById('statusDot').className = 'status-dot online';
+      document.getElementById('statusText').textContent = 'Server connected · Database online';
+      return true;
+    } catch {
+      document.getElementById('statusDot').className = 'status-dot offline';
+      document.getElementById('statusText').textContent = 'Server offline — start server.js first';
+      return false;
+    }
+  }
+
+  // ── Stats ────────────────────────────────────────────────────
+  async function loadStats() {
+    try {
+      const r = await fetch(`${API}/api/stats`);
+      const d = await r.json();
+      document.getElementById('stat-guests').textContent = d.total_guests;
+      document.getElementById('stat-tables').textContent = d.total_tables;
+      document.getElementById('stat-avg').textContent = d.avg_per_table || '—';
+    } catch {}
+  }
+
+  // ── Load guests ───────────────────────────────────────────────
+  async function loadGuests() {
+    try {
+      const r = await fetch(`${API}/api/guests`);
+      const d = await r.json();
+      allGuests = d.guests || [];
+      renderTabs();
+      renderList();
+      loadStats();
+    } catch {
+      document.getElementById('guestList').innerHTML =
+        '<div class="empty-state">Could not reach server.</div>';
+    }
+  }
+
+  // ── Add guest ────────────────────────────────────────────────
+  async function addGuest() {
+    const first = document.getElementById('firstName').value.trim();
+    const last  = document.getElementById('lastName').value.trim();
+    const table = parseInt(document.getElementById('tableNum').value);
+
+    if (!first || !last) return toast('Please enter a full name.', true);
+    if (!table || table < 1) return toast('Please enter a valid table number.', true);
+
+    const btn = document.getElementById('addBtn');
+    btn.innerHTML = '<span class="spinner"></span>';
+    btn.disabled = true;
+
+    try {
+      const r = await fetch(`${API}/api/guests`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: `${first} ${last}`, table_number: table })
+      });
+      const d = await r.json();
+
+      if (!r.ok) { toast(d.error, true); return; }
+
+      document.getElementById('firstName').value = '';
+      document.getElementById('lastName').value = '';
+      document.getElementById('tableNum').value = '';
+      document.getElementById('firstName').focus();
+
+      toast(`✓ ${d.guest.name} added to Table ${table}`);
+      await loadGuests();
+    } catch (e) {
+      toast('Server error. Is the server running?', true);
+    } finally {
+      btn.innerHTML = '⊕ &nbsp;Add Guest';
+      btn.disabled = false;
+    }
+  }
+
+  // ── Remove guest ──────────────────────────────────────────────
+  async function removeGuest(id, name) {
+    if (!confirm(`Remove ${name}?`)) return;
+    try {
+      await fetch(`${API}/api/guests/${id}`, { method: 'DELETE' });
+      toast('Guest removed.');
+      await loadGuests();
+    } catch { toast('Error removing guest.', true); }
+  }
+
+  // ── Clear all ─────────────────────────────────────────────────
+  async function clearAll() {
+    if (!confirm('Remove ALL guests from the database? This cannot be undone.')) return;
+    try {
+      await fetch(`${API}/api/guests`, { method: 'DELETE' });
+      toast('All guests cleared.');
+      await loadGuests();
+    } catch { toast('Error.', true); }
+  }
+
+  // ── CSV Import ────────────────────────────────────────────────
+  function importCSV(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async ev => {
+      const lines = ev.target.result.trim().split('\n');
+      const guests = [];
+      lines.forEach(line => {
+        const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+        if (parts.length >= 3) {
+          const name = `${parts[0]} ${parts[1]}`.trim();
+          const table_number = parseInt(parts[2]);
+          if (name.length > 2 && table_number) guests.push({ name, table_number });
+        }
+      });
+
+      if (!guests.length) return toast('No valid rows found in CSV.', true);
+
+      try {
+        const r = await fetch(`${API}/api/guests/bulk`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ guests })
+        });
+        const d = await r.json();
+        toast(`✓ Imported ${d.added} guests${d.skipped ? `, ${d.skipped} skipped` : ''}`);
+        await loadGuests();
+      } catch { toast('Import failed.', true); }
+
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  }
+
+  // ── Filter / render ───────────────────────────────────────────
+  function filterTable(val, el) {
+    activeFilter = val;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    renderList();
+  }
+
+  function renderTabs() {
+    const tables = [...new Set(allGuests.map(g => g.table_number))].sort((a, b) => a - b);
+    const container = document.getElementById('tableTabs');
+    container.innerHTML = `<button class="tab ${activeFilter === 'all' ? 'active' : ''}" onclick="filterTable('all', this)">All</button>`;
+    tables.forEach(t => {
+      const active = activeFilter == t ? 'active' : '';
+      container.innerHTML += `<button class="tab ${active}" onclick="filterTable(${t}, this)">Table ${t}</button>`;
+    });
+  }
+
+  function renderList() {
+    const q = document.getElementById('searchGuest').value.toLowerCase();
+    const list = document.getElementById('guestList');
+    let filtered = allGuests;
+    if (activeFilter !== 'all') filtered = filtered.filter(g => g.table_number == activeFilter);
+    if (q) filtered = filtered.filter(g => g.name.toLowerCase().includes(q));
+
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state">${allGuests.length ? 'No matches.' : 'No guests yet. Add your first guest!'}</div>`;
+      return;
+    }
+    list.innerHTML = filtered.map(g => `
+      <div class="guest-item">
+        <span class="guest-name">${g.name}</span>
+        <div class="guest-actions">
+          <span class="guest-table">Table ${g.table_number}</span>
+          <button class="btn-sm" onclick="removeGuest(${g.id}, '${g.name.replace(/'/g, "\\'")}')">✕</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ── QR Code ───────────────────────────────────────────────────
+  function generateQR() {
+    const el = document.getElementById('qrcode');
+    el.innerHTML = '';
+    const custom = document.getElementById('customUrl').value.trim();
+    const url = custom || `${window.location.origin}/guest.html`;
+    document.getElementById('urlDisplay').textContent = url;
+    new QRCode(el, { text: url, width: 160, height: 160, colorDark: '#2a2118', colorLight: '#faf7f2', correctLevel: QRCode.CorrectLevel.M });
+  }
+
+  function downloadQR() {
+    const canvas = document.querySelector('#qrcode canvas');
+    if (!canvas) return toast('No QR generated yet.');
+    const link = document.createElement('a');
+    link.download = 'wedding-seating-qr.png';
+    link.href = canvas.toDataURL();
+    link.click();
+    toast('QR downloaded!');
+  }
+
+  // ── Enter key ─────────────────────────────────────────────────
+  ['firstName','lastName','tableNum'].forEach(id => {
+    document.getElementById(id).addEventListener('keydown', e => {
+      if (e.key === 'Enter') addGuest();
+    });
+  });
+
+  // ── Init ──────────────────────────────────────────────────────
+  async function init() {
+    await checkServer();
+    await loadGuests();
+    generateQR();
+  }
+
+  init();
+</script>
+</body>
+</html>
