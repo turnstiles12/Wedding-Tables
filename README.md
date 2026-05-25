@@ -1,4 +1,4 @@
-# 💍 Wedding Seating Chart
+# Wedding Seating Chart
 
 A self-hosted wedding seating chart app with a live SQLite database, admin panel, and guest-facing lookup page with QR code.
 
