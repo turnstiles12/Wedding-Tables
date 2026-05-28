@@ -123,38 +123,43 @@ app.post('/api/guests/bulk', async (req, res) => {
     return res.status(400).json({ error: 'guests array required' });
   }
 
-  let added = 0;
+  // Pre-validate and deduplicate on the server side before touching the DB
+  const seen = new Set();
+  const valid = [];
   let skipped = 0;
-  const errors = [];
 
-  const client = await pool.connect();
+  for (const g of guests) {
+    const name = (g.name || '').trim();
+    const table_number = parseInt(g.table_number);
+    if (!name || isNaN(table_number) || table_number < 1) { skipped++; continue; }
+    if (seen.has(name.toLowerCase())) { skipped++; continue; } // dedupe within the CSV itself
+    seen.add(name.toLowerCase());
+    valid.push({ name, table_number });
+  }
+
+  if (!valid.length) {
+    return res.json({ added: 0, skipped, errors: [] });
+  }
+
+  // Single-query bulk insert using UNNEST — one round-trip regardless of guest count
+  const names        = valid.map(g => g.name);
+  const tableNumbers = valid.map(g => g.table_number);
+
   try {
-    await client.query('BEGIN');
+    const result = await pool.query(
+      `INSERT INTO guests (name, table_number)
+       SELECT * FROM UNNEST($1::text[], $2::int[])
+       ON CONFLICT (name) DO NOTHING
+       RETURNING id`,
+      [names, tableNumbers]
+    );
 
-    for (const g of guests) {
-      const name = (g.name || '').trim();
-      const table_number = parseInt(g.table_number);
-      if (!name || isNaN(table_number) || table_number < 1) { skipped++; continue; }
+    const added = result.rowCount;
+    skipped += (valid.length - added); // rows that hit ON CONFLICT
 
-      try {
-        await client.query(
-          'INSERT INTO guests (name, table_number) VALUES ($1, $2)',
-          [name, table_number]
-        );
-        added++;
-      } catch (e) {
-        if (e.code === '23505') skipped++;
-        else errors.push(`${name}: ${e.message}`);
-      }
-    }
-
-    await client.query('COMMIT');
-    res.json({ added, skipped, errors });
+    res.json({ added, skipped, errors: [] });
   } catch (err) {
-    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
-  } finally {
-    client.release();
   }
 });
 
