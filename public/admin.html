@@ -334,19 +334,38 @@
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
+    
     reader.onload = async ev => {
-      const lines = ev.target.result.trim().split('\n');
+      // 1. Handle Windows (\r\n), Mac (\r), and Linux (\n) line breaks
+      const lines = ev.target.result.trim().split(/\r\n|\n|\r/);
       const guests = [];
+
       lines.forEach(line => {
+        if (!line.trim()) return; // Skip empty lines
+        
         const parts = line.split(',').map(s => s.trim().replace(/^"|"$/g, ''));
+
+        // 2. Support 3-column format: First Name, Last Name, Table
         if (parts.length >= 3) {
           const name = `${parts[0]} ${parts[1]}`.trim();
           const table_number = parseInt(parts[2]);
-          if (name.length > 2 && table_number) guests.push({ name, table_number });
+          if (name.length > 2 && table_number > 0) {
+            guests.push({ name, table_number });
+          }
+        } 
+        // 3. Support 2-column format: Full Name, Table
+        else if (parts.length === 2) {
+          const name = parts[0].trim();
+          const table_number = parseInt(parts[1]);
+          if (name.length > 2 && table_number > 0) {
+            guests.push({ name, table_number });
+          }
         }
       });
 
-      if (!guests.length) return toast('No valid rows found in CSV.', true);
+      if (!guests.length) {
+        return toast('No valid rows found. Ensure format is: First Name, Last Name, Table', true);
+      }
 
       try {
         const r = await fetch(`${API}/api/guests/bulk`, {
@@ -355,12 +374,22 @@
           body: JSON.stringify({ guests })
         });
         const d = await r.json();
+
+        // 4. Properly catch server-side errors
+        if (!r.ok) {
+          return toast(d.error || 'Import failed on server.', true);
+        }
+
         toast(`✓ Imported ${d.added} guests${d.skipped ? `, ${d.skipped} skipped` : ''}`);
         await loadGuests();
-      } catch { toast('Import failed.', true); }
+      } catch (err) { 
+        toast('Import failed due to network error.', true); 
+      }
 
+      // Reset the file input so the same file can be clicked again if needed
       e.target.value = '';
     };
+    
     reader.readAsText(file);
   }
 
