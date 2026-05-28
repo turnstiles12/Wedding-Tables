@@ -1,130 +1,96 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const fs = require('fs');
-const initSqlJs = require('sql.js');
+const { Pool } = require('pg');
 
 const app = express();
-const PORT = 3000;
-const DB_PATH = path.join(__dirname, 'data', 'wedding.db');
+const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Ensure data directory exists
-if (!fs.existsSync(path.join(__dirname, 'data'))) {
-  fs.mkdirSync(path.join(__dirname, 'data'));
-}
-
-let db;
+// ── Database connection ────────────────────────────────────────
+// Railway automatically sets DATABASE_URL when you add a PostgreSQL service
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
 async function initDB() {
-  const SQL = await initSqlJs();
-
-  // Load existing DB from disk, or create new
-  if (fs.existsSync(DB_PATH)) {
-    const fileBuffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(fileBuffer);
-    console.log('📂 Loaded existing database.');
-  } else {
-    db = new SQL.Database();
-    console.log('✨ Created new database.');
-  }
-
-  db.run(`
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS guests (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
       table_number INTEGER NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
-
-  persistDB();
+  console.log('✅ Database ready.');
 }
 
-// Write db to disk after every write operation
-function persistDB() {
-  const data = db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
-}
-
-// ─── ROUTES ──────────────────────────────────────────────────────────────────
+// ── ROUTES ─────────────────────────────────────────────────────
 
 // GET all guests
-app.get('/api/guests', (req, res) => {
+app.get('/api/guests', async (req, res) => {
   try {
-    const stmt = db.prepare('SELECT id, name, table_number FROM guests ORDER BY table_number, name');
-    const guests = [];
-    while (stmt.step()) {
-      const row = stmt.getAsObject();
-      guests.push(row);
-    }
-    stmt.free();
-    res.json({ guests });
+    const result = await pool.query(
+      'SELECT id, name, table_number FROM guests ORDER BY table_number, name'
+    );
+    res.json({ guests: result.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET search guests by name
-app.get('/api/guests/search', (req, res) => {
+// GET search guests by name (autocomplete)
+app.get('/api/guests/search', async (req, res) => {
   const q = (req.query.q || '').trim();
   if (!q) return res.json({ guests: [] });
 
   try {
-    const stmt = db.prepare(
+    const result = await pool.query(
       `SELECT id, name, table_number FROM guests
-       WHERE name LIKE ? COLLATE NOCASE
+       WHERE name ILIKE $1
        ORDER BY table_number, name
-       LIMIT 10`
+       LIMIT 10`,
+      [`%${q}%`]
     );
-    stmt.bind([`%${q}%`]);
-    const guests = [];
-    while (stmt.step()) {
-      guests.push(stmt.getAsObject());
-    }
-    stmt.free();
-    res.json({ guests });
+    res.json({ guests: result.rows });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // GET exact lookup (for guest page)
-app.get('/api/guests/lookup', (req, res) => {
+app.get('/api/guests/lookup', async (req, res) => {
   const name = (req.query.name || '').trim();
   if (!name) return res.status(400).json({ error: 'Name required' });
 
   try {
-    // Try exact match first, then partial
-    let stmt = db.prepare(
-      `SELECT id, name, table_number FROM guests WHERE name = ? COLLATE NOCASE LIMIT 1`
+    // Try exact match first
+    let result = await pool.query(
+      'SELECT id, name, table_number FROM guests WHERE name ILIKE $1 LIMIT 1',
+      [name]
     );
-    stmt.bind([name]);
-    let guest = null;
-    if (stmt.step()) guest = stmt.getAsObject();
-    stmt.free();
 
-    if (!guest) {
-      stmt = db.prepare(
-        `SELECT id, name, table_number FROM guests WHERE name LIKE ? COLLATE NOCASE LIMIT 1`
+    // Fall back to partial match
+    if (!result.rows.length) {
+      result = await pool.query(
+        'SELECT id, name, table_number FROM guests WHERE name ILIKE $1 LIMIT 1',
+        [`%${name}%`]
       );
-      stmt.bind([`%${name}%`]);
-      if (stmt.step()) guest = stmt.getAsObject();
-      stmt.free();
     }
 
-    if (!guest) return res.json({ found: false });
-    res.json({ found: true, guest });
+    if (!result.rows.length) return res.json({ found: false });
+    res.json({ found: true, guest: result.rows[0] });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
 // POST add single guest
-app.post('/api/guests', (req, res) => {
+app.post('/api/guests', async (req, res) => {
   const { name, table_number } = req.body;
   if (!name || !table_number) {
     return res.status(400).json({ error: 'Name and table_number required' });
@@ -137,20 +103,13 @@ app.post('/api/guests', (req, res) => {
   }
 
   try {
-    db.run(
-      'INSERT INTO guests (name, table_number) VALUES (?, ?)',
+    const result = await pool.query(
+      'INSERT INTO guests (name, table_number) VALUES ($1, $2) RETURNING id, name, table_number',
       [trimmedName, tableNum]
     );
-    persistDB();
-
-    const stmt = db.prepare('SELECT id, name, table_number FROM guests WHERE name = ? COLLATE NOCASE');
-    stmt.bind([trimmedName]);
-    const guest = stmt.step() ? stmt.getAsObject() : null;
-    stmt.free();
-
-    res.status(201).json({ guest });
+    res.status(201).json({ guest: result.rows[0] });
   } catch (err) {
-    if (err.message.includes('UNIQUE')) {
+    if (err.code === '23505') {
       return res.status(409).json({ error: `"${trimmedName}" is already in the guest list.` });
     }
     res.status(500).json({ error: err.message });
@@ -158,7 +117,7 @@ app.post('/api/guests', (req, res) => {
 });
 
 // POST bulk import
-app.post('/api/guests/bulk', (req, res) => {
+app.post('/api/guests/bulk', async (req, res) => {
   const { guests } = req.body;
   if (!Array.isArray(guests) || !guests.length) {
     return res.status(400).json({ error: 'guests array required' });
@@ -168,45 +127,45 @@ app.post('/api/guests/bulk', (req, res) => {
   let skipped = 0;
   const errors = [];
 
+  const client = await pool.connect();
   try {
-    db.run('BEGIN TRANSACTION');
+    await client.query('BEGIN');
 
     for (const g of guests) {
       const name = (g.name || '').trim();
       const table_number = parseInt(g.table_number);
-      if (!name || isNaN(table_number) || table_number < 1) {
-        skipped++;
-        continue;
-      }
+      if (!name || isNaN(table_number) || table_number < 1) { skipped++; continue; }
+
       try {
-        db.run('INSERT INTO guests (name, table_number) VALUES (?, ?)', [name, table_number]);
+        await client.query(
+          'INSERT INTO guests (name, table_number) VALUES ($1, $2)',
+          [name, table_number]
+        );
         added++;
       } catch (e) {
-        if (e.message.includes('UNIQUE')) skipped++;
+        if (e.code === '23505') skipped++;
         else errors.push(`${name}: ${e.message}`);
       }
     }
 
-    db.run('COMMIT');
-    persistDB();
+    await client.query('COMMIT');
     res.json({ added, skipped, errors });
   } catch (err) {
-    db.run('ROLLBACK');
+    await client.query('ROLLBACK');
     res.status(500).json({ error: err.message });
+  } finally {
+    client.release();
   }
 });
 
 // PUT update guest
-app.put('/api/guests/:id', (req, res) => {
-  const { id } = req.params;
+app.put('/api/guests/:id', async (req, res) => {
   const { name, table_number } = req.body;
-
   try {
-    db.run(
-      'UPDATE guests SET name = ?, table_number = ? WHERE id = ?',
-      [name.trim(), parseInt(table_number), parseInt(id)]
+    await pool.query(
+      'UPDATE guests SET name = $1, table_number = $2 WHERE id = $3',
+      [name.trim(), parseInt(table_number), parseInt(req.params.id)]
     );
-    persistDB();
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -214,10 +173,9 @@ app.put('/api/guests/:id', (req, res) => {
 });
 
 // DELETE single guest
-app.delete('/api/guests/:id', (req, res) => {
+app.delete('/api/guests/:id', async (req, res) => {
   try {
-    db.run('DELETE FROM guests WHERE id = ?', [parseInt(req.params.id)]);
-    persistDB();
+    await pool.query('DELETE FROM guests WHERE id = $1', [parseInt(req.params.id)]);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -225,10 +183,9 @@ app.delete('/api/guests/:id', (req, res) => {
 });
 
 // DELETE all guests
-app.delete('/api/guests', (req, res) => {
+app.delete('/api/guests', async (req, res) => {
   try {
-    db.run('DELETE FROM guests');
-    persistDB();
+    await pool.query('DELETE FROM guests');
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -236,33 +193,42 @@ app.delete('/api/guests', (req, res) => {
 });
 
 // GET stats
-app.get('/api/stats', (req, res) => {
+app.get('/api/stats', async (req, res) => {
   try {
-    const r = db.exec(`
+    const result = await pool.query(`
       SELECT
-        COUNT(*) as total_guests,
-        COUNT(DISTINCT table_number) as total_tables
+        COUNT(*) AS total_guests,
+        COUNT(DISTINCT table_number) AS total_tables
       FROM guests
     `);
-    const row = r[0]?.values[0] || [0, 0];
-    const [total_guests, total_tables] = row;
-    const avg = total_tables > 0 ? Math.round((total_guests / total_tables) * 10) / 10 : 0;
-    res.json({ total_guests, total_tables, avg_per_table: avg });
+    const { total_guests, total_tables } = result.rows[0];
+    const avg = total_tables > 0
+      ? Math.round((total_guests / total_tables) * 10) / 10
+      : 0;
+    res.json({
+      total_guests: parseInt(total_guests),
+      total_tables: parseInt(total_tables),
+      avg_per_table: avg
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Catch-all: serve index
+// Catch-all: serve admin page
 app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
-// ─── START ────────────────────────────────────────────────────────────────────
+// ── START ──────────────────────────────────────────────────────
 initDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`\n🌸 Wedding Seating Server running at http://localhost:${PORT}`);
-    console.log(`   Admin panel : http://localhost:${PORT}/admin.html`);
-    console.log(`   Guest page  : http://localhost:${PORT}/guest.html\n`);
+    console.log(`\n🌸 Wedding Seating Server running on port ${PORT}`);
+    console.log(`   Admin : http://localhost:${PORT}/admin.html`);
+    console.log(`   Guest : http://localhost:${PORT}/guest.html\n`);
   });
+}).catch(err => {
+  console.error('❌ Failed to connect to database:', err.message);
+  console.error('Make sure DATABASE_URL is set in your environment variables.');
+  process.exit(1);
 });
