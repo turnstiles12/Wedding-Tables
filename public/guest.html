@@ -43,6 +43,12 @@
 
   .page { width: 100%; max-width: 520px; padding: 60px 24px 40px; position: relative; z-index: 1; }
 
+  .host-banner { display: none; text-align: center; margin-bottom: 28px; padding-bottom: 24px; border-bottom: 1px solid var(--border); animation: fadeDown 0.8s ease both; }
+  .host-banner.visible { display: block; }
+  .host-logo { max-height: 96px; max-width: 220px; object-fit: contain; margin-bottom: 14px; }
+  .host-names { font-family: 'Cormorant Garamond', serif; font-size: clamp(26px, 7vw, 38px); font-weight: 300; line-height: 1.2; color: var(--dark); letter-spacing: 1px; }
+  .host-tagline { font-family: 'Cormorant Garamond', serif; font-size: 14px; font-style: italic; color: var(--mid); margin-top: 8px; letter-spacing: 1px; }
+
   .ornament { text-align: center; margin-bottom: 8px; font-size: 20px; color: var(--gold); letter-spacing: 6px; animation: fadeDown 0.8s ease both; }
   @keyframes fadeDown { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -111,6 +117,8 @@
 <div class="bg-deco" id="bgDeco"></div>
 
 <div class="page">
+  <div class="host-banner" id="hostBanner"></div>
+
   <div class="ornament">✦ &nbsp; ✦ &nbsp; ✦</div>
 
   <header>
@@ -255,6 +263,36 @@
     }
   }
 
+  // ── Host banner ───────────────────────────────────────────────
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => (
+      { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]
+    ));
+  }
+
+  async function loadBanner() {
+    try {
+      const r = await fetch(`${API}/api/settings`);
+      const d = await r.json();
+      const s = d.settings || {};
+      if (s.show_banner === false) return;
+
+      const names = (s.host_names || '').trim();
+      const line  = (s.tagline || '').trim();
+      const logo  = (s.logo_data || '').trim();
+      if (!names && !line && !logo) return;
+
+      const el = document.getElementById('hostBanner');
+      el.innerHTML = `
+        ${logo ? `<img class="host-logo" src="${escapeHtml(logo)}" alt="">` : ''}
+        ${names ? `<div class="host-names">${escapeHtml(names)}</div>` : ''}
+        ${line ? `<div class="host-tagline">${escapeHtml(line)}</div>` : ''}
+      `;
+      el.classList.add('visible');
+      if (names) document.title = `${names} — Find Your Seat`;
+    } catch {}
+  }
+
   // ── Petals ────────────────────────────────────────────────────
   function createPetals() {
     const deco = document.getElementById('bgDeco');
@@ -277,6 +315,7 @@
   });
 
   createPetals();
+  loadBanner();
   loadFooter();
 </script>
 </body>
